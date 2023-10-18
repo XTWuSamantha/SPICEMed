@@ -1,9 +1,12 @@
+
 from spice.data.stl10 import STL10
 from spice.data.transformations import get_train_transformations
 from spice.data.stl10_embedding import STL10EMB
 from spice.data.cifar import CIFAR10, CIFAR20
 from spice.data.imagenet import ImageNetSubEmb, ImageNetSubEmbLMDB, TImageNetEmbLMDB
 from spice.data.npy import NPYEMB
+import medmnist
+from medmnist import INFO, Evaluator
 
 
 def build_dataset(data_cfg):
@@ -77,6 +80,12 @@ def build_dataset(data_cfg):
                                    embedding=data_cfg.embedding,
                                    transform1=train_trans1,
                                    transform2=train_trans2)
+    
+    elif type == "DermaMNIST":
+        info = INFO["dermamnist"]
+        DataClass = getattr(medmnist, info['python_class'])
+        dataset = DataClass(split = data_cfg.split, transform1 = train_trans1 ,transform2 = train_trans2)
+
     else:
         assert TypeError
 

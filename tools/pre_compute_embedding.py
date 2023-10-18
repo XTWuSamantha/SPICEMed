@@ -3,6 +3,9 @@ import os
 import sys
 sys.path.insert(0, './')
 
+import medmnist
+from medmnist import INFO, Evaluator
+
 import torch
 import torch.nn as nn
 import torch.nn.parallel
@@ -21,7 +24,7 @@ from spice.utils.load_model_weights import load_model_weights
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument(
     "--config-file",
-    default="./configs/stl10/embedding.py",
+    default="./configs/BloodMNIST/embedding.py",
     metavar="FILE",
     help="path to config file",
     type=str,
@@ -44,7 +47,7 @@ def main():
 
     # create model
     model_sim = build_model_sim(cfg.model_sim)
-    print(model_sim)
+    # print(model_sim)
 
     torch.cuda.set_device(cfg.gpu)
     model_sim = model_sim.cuda(cfg.gpu)
@@ -55,6 +58,13 @@ def main():
 
     cudnn.benchmark = True
 
+    # info = INFO["dermamnist"]
+    # DataClass = getattr(medmnist, info['python_class'])
+    # train_trans1 = get_train_transformations(cfg.data_test.trans1)
+    # train_trans2 = get_train_transformations(cfg.data_test.trans2)
+    # info = INFO["dermamnist"]
+    # DataClass = getattr(medmnist, info['python_class'])
+    # dataset = DataClass(split = data_cfg.split, transform1 = train_trans1 ,transform2 = train_trans2)
     dataset_val = build_dataset(cfg.data_test)
     val_loader = torch.utils.data.DataLoader(dataset_val, batch_size=cfg.batch_size, shuffle=False, num_workers=1)
 

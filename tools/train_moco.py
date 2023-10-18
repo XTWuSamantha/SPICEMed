@@ -26,6 +26,12 @@ from spice.model.feature_modules.cluster_resnet import ClusterResNet
 from spice.model.feature_modules.resnet_stl import resnet18
 from spice.model.feature_modules.resnet_cifar import resnet18_cifar
 
+from tqdm import tqdm
+import numpy as np
+
+import medmnist
+from medmnist import INFO, Evaluator
+
 import moco.loader
 import moco.builder
 from moco.stl10 import STL10
@@ -109,6 +115,10 @@ parser.add_argument('--aug-plus', action='store_false',
 parser.add_argument('--cos', action='store_false',
                     help='use cosine lr schedule')
 
+# options for MedMNIST
+parser.add_argument('--data-flag', default='medicalmnist',
+                    help='selection on Medical dataset')
+
 
 def main():
     args = parser.parse_args()
@@ -150,6 +160,10 @@ def main():
 
 def main_worker(gpu, ngpus_per_node, args):
     args.gpu = gpu
+    info = INFO[args.data_flag]
+    task = info['task']
+    n_channels = info['n_channels']
+    n_classes = len(info['label'])
 
     # suppress printing if not master
     if args.multiprocessing_distributed and args.gpu != 0:
@@ -177,6 +191,8 @@ def main_worker(gpu, ngpus_per_node, args):
         base_model = resnet18
     elif args.arch == "resnet18_cifar":
         base_model = resnet18_cifar
+    elif args.arch == "CNN":
+        base_model = Net(in_channels=n_channels,num_classes=n_classes)
     else:
         base_model = models.__dict__[args.arch]
     model = moco.builder.MoCo(
@@ -240,8 +256,10 @@ def main_worker(gpu, ngpus_per_node, args):
     cudnn.benchmark = True
 
     # Data loading code
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
+    # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+    #                                  std=[0.229, 0.224, 0.225])
+    normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                                     std=[0.5, 0.5, 0.5])
     if args.aug_plus:
         # MoCo v2's aug: similar to SimCLR https://arxiv.org/abs/2002.05709
         augmentation = [
@@ -265,6 +283,11 @@ def main_worker(gpu, ngpus_per_node, args):
             transforms.ToTensor(),
             normalize
         ]
+    
+    # info = INFO[args.data_flag]
+    # task = info['task']
+    # n_channels = info['n_channels']
+    # n_classes = len(info['label'])
 
     if args.data_type == 'stl10':
         if args.all:
@@ -279,6 +302,15 @@ def main_worker(gpu, ngpus_per_node, args):
     elif args.data_type == 'cifar100':
         train_dataset = CIFAR100(args.data, all=args.all,
                                  transform=moco.loader.TwoCropsTransform(transforms.Compose(augmentation)))
+    elif args.data_type == info['python_class']:
+        DataClass = getattr(medmnist, info['python_class'])
+        # data_transform = transforms.Compose([
+        #     transforms.ToTensor(),
+        #     transforms.Normalize(mean=[.5], std=[.5])
+        # ])
+        train_dataset = DataClass(split='train', transform=moco.loader.TwoCropsTransform(transforms.Compose(augmentation)), download=True)
+        # print(train_dataset)
+
     else:
         raise TypeError
 
@@ -290,7 +322,12 @@ def main_worker(gpu, ngpus_per_node, args):
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
         num_workers=args.workers, pin_memory=True, sampler=train_sampler, drop_last=True)
+    # print(args.batch_size)
 
+    # for i in train_loader:
+	#     print(i)
+	#     print("stop")
+        
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             train_sampler.set_epoch(epoch)
@@ -343,18 +380,30 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     for i, (images, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
+        # print(images)
+        # print("stop")
+        # print(images[0])
+        # print("stop")
+        # print(images[1])
+        # print("stop")
 
         if args.gpu is not None:
             images[0] = images[0].cuda(args.gpu, non_blocking=True)
             images[1] = images[1].cuda(args.gpu, non_blocking=True)
 
         # compute output
+       
         output, target = model(im_q=images[0], im_k=images[1])
+        # output, target = model(im_q=images[0], im_k=images[1])
         loss = criterion(output, target)
+        # print(target)
 
         # acc1/acc5 are (K+1)-way contrast classifier accuracy
         # measure accuracy and record loss
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
+        # losses.update(loss.item(), images[0].size(0))
+        # top1.update(acc1[0], images[0].size(0))
+        # top5.update(acc5[0], images[0].size(0))
         losses.update(loss.item(), images[0].size(0))
         top1.update(acc1[0], images[0].size(0))
         top5.update(acc5[0], images[0].size(0))
@@ -436,6 +485,7 @@ def accuracy(output, target, topk=(1,)):
     with torch.no_grad():
         maxk = max(topk)
         batch_size = target.size(0)
+        # print(batch_size)
 
         _, pred = output.topk(maxk, 1, True, True)
         pred = pred.t()
@@ -447,6 +497,55 @@ def accuracy(output, target, topk=(1,)):
             correct_k = correct[:k].reshape(k*correct.shape[1]).float().sum(0, keepdim=True)
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
+
+class Net(nn.Module):
+    def __init__(self, in_channels, num_classes):
+        super(Net, self).__init__()
+
+        self.layer1 = nn.Sequential(
+            nn.Conv2d(in_channels, 16, kernel_size=3),
+            nn.BatchNorm2d(16),
+            nn.ReLU())
+
+        self.layer2 = nn.Sequential(
+            nn.Conv2d(16, 16, kernel_size=3),
+            nn.BatchNorm2d(16),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2))
+
+        self.layer3 = nn.Sequential(
+            nn.Conv2d(16, 64, kernel_size=3),
+            nn.BatchNorm2d(64),
+            nn.ReLU())
+        
+        self.layer4 = nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=3),
+            nn.BatchNorm2d(64),
+            nn.ReLU())
+
+        self.layer5 = nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2))
+
+        self.fc = nn.Sequential(
+            nn.Linear(64 * 4 * 4, 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, num_classes))
+
+    def forward(self, x):
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        x = self.layer5(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        return x
+
 
 
 if __name__ == '__main__':

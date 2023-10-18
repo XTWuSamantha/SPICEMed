@@ -86,7 +86,8 @@ class ResNet(nn.Module):
 
         self.feature_only = feature_only
         if not feature_only:
-            self.avgpool = nn.AvgPool2d(7, stride=1)
+            # self.avgpool = nn.AvgPool2d(7, stride=1)
+            self.avgpool = nn.AvgPool2d(2, stride=1)
 
             if test:
                 self.fc = nn.Linear(512, num_classes)

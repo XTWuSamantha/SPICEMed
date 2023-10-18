@@ -110,11 +110,14 @@ class ClusterResNet(ResNetTrunk):
     self.feature_only = feature_only
     if not feature_only:
       if in_size == 96:
-        avg_pool_sz = 7
+        # avg_pool_sz = 7
+        avg_pool_sz = 2
       elif in_size == 64:
         avg_pool_sz = 5
       elif in_size == 32:
         avg_pool_sz = 3
+      elif in_size == 28:
+        avg_pool_sz = 1
       print("avg_pool_sz %d" % avg_pool_sz)
 
       self.avgpool = nn.AvgPool2d(avg_pool_sz, stride=1)
